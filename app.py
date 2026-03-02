@@ -77,7 +77,7 @@ def build_pdf_final_ultra(fig, filtros):
 # =================================================================
 # 4. INTERFACE E DASHBOARD
 # =================================================================
-st.title("📊 Painel Diagnóstico: Máxima Legibilidade")
+st.title("📊 Painel Diagnóstico")
 
 uploaded = st.file_uploader("Upload da Planilha FIX2000", type=["xlsx"])
 
