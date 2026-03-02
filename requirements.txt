@@ -1,7 +1,8 @@
+altair
 pandas
 openpyxl
 matplotlib
 streamlit
 reportlab
-altair
+
  
