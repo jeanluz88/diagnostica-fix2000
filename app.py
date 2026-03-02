@@ -16,7 +16,7 @@ from reportlab.lib.utils import ImageReader
 # =================================================================
 # 1. CONFIGURAÇÕES E NORMALIZAÇÃO
 # =================================================================
-st.set_page_config(page_title="Painel Diagnóstico - Máxima Leitura", layout="wide")
+st.set_page_config(page_title="Painel Diagnóstico - ", layout="wide")
 
 def _strip_accents(s: str) -> str:
     return "".join(ch for ch in unicodedata.normalize("NFKD", s) if not unicodedata.combining(ch))
