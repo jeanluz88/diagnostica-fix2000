@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from fpdf import FPDF
 import io
 
-# Configuração da página e estilo
+# Configurações de interface
 st.set_page_config(page_title="Painel Diagnóstico", layout="wide")
 st.markdown("<style>.big-font { font-size:14pt !important; }</style>", unsafe_allow_html=True)
 
@@ -14,71 +14,72 @@ uploaded_file = st.file_uploader("Upload da Planilha Modelo_Diagnostica_Por_Turm
 
 if uploaded_file:
     try:
-        # Lendo a planilha (ajuste o nome da aba se necessário)
+        # Lê a planilha e remove espaços dos nomes das colunas
         df = pd.read_excel(uploaded_file)
-        
-        # Padronização: remove espaços e garante que nomes de colunas existam
         df.columns = [str(c).strip() for c in df.columns]
-        
-        # Verificação de segurança para as colunas principais
-        colunas_necessarias = ['Disciplina', 'Serie', 'Turma', 'Resultado']
-        colunas_faltando = [c for c in colunas_necessarias if c not in df.columns]
 
-        if colunas_faltando:
-            st.error(f"Atenção: A planilha precisa ter as colunas: {', '.join(colunas_faltando)}")
+        # MAPEAMENTO INTELIGENTE: Traduz nomes com ou sem acento
+        mapeamento = {
+            'Série': 'Serie', 'SERIE': 'Serie', 'serie': 'Serie',
+            'Língua Portuguesa': 'Lingua Portuguesa',
+            'Resultado': 'Resultado', 'RESULTADO': 'Resultado'
+        }
+        df.rename(columns=mapeamento, inplace=True)
+
+        # Verifica se as colunas básicas existem
+        colunas_obrigatorias = ['Disciplina', 'Serie', 'Turma', 'Resultado']
+        faltando = [c for c in colunas_obrigatorias if c not in df.columns]
+
+        if faltando:
+            st.error(f"⚠️ Erro na Planilha: Faltam as colunas: {', '.join(faltando)}")
+            st.info("Dica: Verifique se os nomes das colunas estão na primeira linha.")
         else:
-            # Limpeza de dados para evitar duplicados como "Lingua Portuguesa"
-            for col in ['Disciplina', 'Serie', 'Turma']:
-                df[col] = df[col].astype(str).str.strip()
+            # Limpa os dados para remover duplicados por espaços extras
+            for c in colunas_obrigatorias:
+                df[c] = df[c].astype(str).str.strip()
 
-            # --- FILTROS ÚNICOS (Correção da Duplicidade) ---
-            st.sidebar.header("Filtros")
+            # FILTROS ÚNICOS (Sem duplicar Língua Portuguesa)
+            st.sidebar.header("Configurações")
             disciplinas = sorted(df['Disciplina'].unique())
-            disciplina_sel = st.sidebar.selectbox("Disciplina", disciplinas)
+            disc_sel = st.sidebar.selectbox("Disciplina", disciplinas)
 
-            series = sorted(df[df['Disciplina'] == disciplina_sel]['Serie'].unique())
+            series = sorted(df[df['Disciplina'] == disc_sel]['Serie'].unique())
             serie_sel = st.sidebar.selectbox("Série", series)
 
-            turmas = sorted(df[(df['Disciplina'] == disciplina_sel) & (df['Serie'] == serie_sel)]['Turma'].unique())
+            turmas = sorted(df[(df['Disciplina'] == disc_sel) & (df['Serie'] == serie_sel)]['Turma'].unique())
             turma_sel = st.sidebar.selectbox("Turma", turmas)
 
             # Filtragem final
-            dados_filtrados = df[(df['Disciplina'] == disciplina_sel) & 
-                                 (df['Serie'] == serie_sel) & 
-                                 (df['Turma'] == turma_sel)]
+            final_df = df[(df['Disciplina'] == disc_sel) & (df['Serie'] == serie_sel) & (df['Turma'] == turma_sel)]
 
-            # --- LAYOUT ---
-            col1, col2 = st.columns([1.5, 1])
+            # EXIBIÇÃO LADO A LADO
+            c1, c2 = st.columns([1.5, 1])
 
-            with col1:
-                st.subheader("Habilidades")
-                if 'Habilidade_Descricao' in dados_filtrados.columns:
-                    for i, row in dados_filtrados.iterrows():
-                        codigo = row.get('Habilidade_Codigo', 'Cod')
-                        st.markdown(f'<p class="big-font"><b>{codigo}:</b> {row["Habilidade_Descricao"]}</p>', unsafe_allow_html=True)
-                else:
-                    st.warning("Coluna 'Habilidade_Descricao' não encontrada.")
+            with c1:
+                st.subheader("Habilidades Analisadas")
+                for _, row in final_df.iterrows():
+                    desc = row.get('Habilidade_Descricao', 'Descrição não encontrada')
+                    cod = row.get('Habilidade_Codigo', 'Cod')
+                    st.markdown(f'<p class="big-font"><b>{cod}:</b> {desc}</p>', unsafe_allow_html=True)
 
-            with col2:
-                st.subheader("Desempenho")
-                if not dados_filtrados.empty:
+            with c2:
+                st.subheader("Gráfico de Desempenho")
+                if not final_df.empty:
                     fig, ax = plt.subplots()
-                    contagem = dados_filtrados['Resultado'].value_counts()
+                    contagem = final_df['Resultado'].value_counts()
                     ax.pie(contagem, labels=contagem.index, autopct='%1.1f%%', colors=['#4CAF50', '#FFC107', '#F44336'])
                     st.pyplot(fig)
 
-                    # --- BOTÃO PDF ---
-                    if st.button("Gerar PDF"):
+                    if st.button("📄 Gerar PDF"):
                         pdf = FPDF()
                         pdf.add_page()
                         pdf.set_font("Arial", 'B', 16)
-                        pdf.cell(200, 10, f"Relatorio - {disciplina_sel}", ln=True, align='C')
-                        pdf_output = pdf.output(dest='S').encode('latin-1', 'replace')
-                        st.download_button("📥 Baixar PDF", data=pdf_output, file_name="Relatorio.pdf")
+                        pdf.cell(200, 10, f"Relatorio: {disc_sel} - {serie_sel}", ln=True, align='C')
+                        st.download_button("📥 Baixar PDF", data=pdf.output(dest='S').encode('latin-1', 'replace'), file_name="Relatorio.pdf")
                 else:
-                    st.write("Sem dados para esta seleção.")
+                    st.warning("Nenhum dado encontrado para esta seleção.")
 
     except Exception as e:
-        st.error(f"Erro ao processar: {e}")
+        st.error(f"Erro inesperado: {e}")
 else:
-    st.info("Aguardando a planilha Modelo_Diagnostica_Por_Turma...")
+    st.info("Aguardando o upload da planilha Modelo_Diagnostica_Por_Turma...")
