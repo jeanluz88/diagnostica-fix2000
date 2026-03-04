@@ -10,7 +10,7 @@ uploaded_file = st.file_uploader("Arraste a planilha NAVARRO.xlsx aqui", type=["
 
 if uploaded_file:
     try:
-        # LER A PLANILHA BRUTA (sem cabeçalho) para localizar os dados reais
+        # LER A PLANILHA BRUTA para localizar os dados reais
         df_raw = pd.read_excel(uploaded_file, header=None)
         
         # BUSCA DINÂMICA: Varre as linhas para achar 'Disciplina' ou 'Série'
@@ -25,7 +25,7 @@ if uploaded_file:
         # Relê o arquivo a partir da linha correta encontrada
         df = pd.read_excel(uploaded_file, skiprows=start_row)
         
-        # NORMALIZAÇÃO DE COLUNAS: Remove espaços e trata acentos
+        # NORMALIZAÇÃO DE COLUNAS: Remove espaços e trata acentos/maiúsculas
         df.columns = [
             str(c).strip().upper()
             .replace('É', 'E').replace('Í', 'I').replace('Á', 'A') 
@@ -63,7 +63,7 @@ if uploaded_file:
         else:
             st.error("⚠️ Não foi possível localizar as colunas de dados.")
             st.write("O sistema detectou estas colunas na linha de dados:", list(df.columns))
-            st.info("Verifique se as colunas 'Disciplina' e 'Série' estão escritas corretamente.")
+            st.info("Verifique se as colunas 'Disciplina' e 'Série' estão na planilha.")
 
     except Exception as e:
         st.error(f"Erro técnico ao ler o arquivo: {e}")
