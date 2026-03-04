@@ -48,14 +48,13 @@ def load_and_merge_full(file_bytes):
     return df
 
 # =================================================================
-# 3. GERAÇÃO DE PDF (ESTÉTICA MELHORADA)
+# 3. GERAÇÃO DE PDF (MÁXIMO APROVEITAMENTO)
 # =================================================================
 def build_pdf_final_ultra(fig, filtros):
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=landscape(A4))
     width, height = landscape(A4) 
     
-    # Cabeçalho Limpo
     c.setFont("Helvetica-Bold", 18)
     c.drawString(0.8*cm, height - 1.2*cm, "RELATÓRIO DIAGNÓSTICO POR HABILIDADE")
     
@@ -64,11 +63,10 @@ def build_pdf_final_ultra(fig, filtros):
     c.drawString(0.8*cm, height - 1.9*cm, info)
     
     img_buf = io.BytesIO()
-    # bbox_inches='tight' com DPI alto garante nitidez sem esticar artificialmente
     fig.savefig(img_buf, format='png', bbox_inches='tight', dpi=300) 
     img_buf.seek(0)
     
-    # preserveAspectRatio=True evita o aspecto "amassado" ou "esticado"
+    # Desenho que respeita a proporção para não esticar as letras
     c.drawImage(ImageReader(img_buf), 0.5*cm, 0.5*cm, width=width-1.0*cm, height=height-3.5*cm, preserveAspectRatio=True)
     
     c.showPage()
@@ -101,7 +99,6 @@ if uploaded:
     if ano_sel != "Todos": df_f = df_f[df_f["Ano/Série"] == ano_sel]
     if disc_sel != "Todas": df_f = df_f[df_f["Disciplina"] == disc_sel]
 
-    # Quebra de linha inteligente para não "comer" a margem
     def wrap_label(id_hab, texto):
         return "\n".join(textwrap.wrap(f"{id_hab} - {texto}", width=50))
 
@@ -117,6 +114,44 @@ if uploaded:
     df_agg["p_nao"] = (df_agg["NÃO"] / den) * 100
     df_agg = df_agg.sort_values("p_sim")
 
-    # --- CONFIGURAÇÃO ESTÉTICA DO GRÁFICO ---
-    # Altura baseada no número de itens para manter barras proporcionais
-    altura_fig = max(8, len(df
+    # --- GRÁFICO CORRIGIDO ---
+    altura_fig = max(8, len(df_agg) * 1.2)
+    fig, ax = plt.subplots(figsize=(20, altura_fig))
+    
+    ax.barh(df_agg["Label"], df_agg["p_sim"], color="#2ecc71", label="SIM")
+    ax.barh(df_agg["Label"], df_agg["p_par"], left=df_agg["p_sim"], color="#f1c40f", label="PARCIAL")
+    ax.barh(df_agg["Label"], df_agg["p_nao"], left=df_agg["p_sim"]+df_agg["p_par"], color="#e74c3c", label="NÃO")
+
+    # Fonte 14 e alinhamento total à esquerda
+    ax.set_yticklabels(df_agg["Label"], fontweight='bold', fontsize=14, ha='right')
+
+    # Margens que garantem o texto na esquerda e barras na direita
+    plt.subplots_adjust(left=0.42, right=0.98, top=0.98, bottom=0.08) 
+
+    for i in range(len(df_agg)):
+        s, p, n = int(df_agg["SIM"].iloc[i]), int(df_agg["PARCIAL"].iloc[i]), int(df_agg["NÃO"].iloc[i])
+        ps, pp, pn = df_agg["p_sim"].iloc[i], df_agg["p_par"].iloc[i], df_agg["p_nao"].iloc[i]
+        
+        if ps > 5:
+            ax.text(ps/2, i, f"{s}\n({ps:.0f}%)", va='center', ha='center', color='white', fontweight='bold', fontsize=11)
+        if pp > 5:
+            ax.text(ps + pp/2, i, f"{p}\n({pp:.0f}%)", va='center', ha='center', color='black', fontweight='bold', fontsize=11)
+        if pn > 5:
+            ax.text(ps + pp + pn/2, i, f"{n}\n({pn:.0f}%)", va='center', ha='center', color='white', fontweight='bold', fontsize=11)
+
+    ax.set_xlim(0, 100)
+    ax.legend(loc='lower center', bbox_to_anchor=(0.5, -0.05), ncol=3, fontsize=12, frameon=False)
+    
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    
+    st.pyplot(fig, use_container_width=True)
+
+    st.divider()
+    if st.button("🖨️ Gerar PDF Final Maximizado"):
+        filtros_pdf = {"Série": ano_sel, "Disciplina": disc_sel, "Turmas": ", ".join(turma_sel)}
+        pdf_bytes = build_pdf_final_ultra(fig, filtros_pdf)
+        st.download_button("Baixar Relatório PDF", pdf_bytes, f"Diagnostica_Final_{ano_sel}.pdf")
+
+else:
+    st.info("Aguardando planilha...")
