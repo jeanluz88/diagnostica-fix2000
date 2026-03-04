@@ -3,98 +3,79 @@ import pandas as pd
 import plotly.express as px
 from io import BytesIO
 
-# Configurações iniciais
 st.set_page_config(page_title="Painel Diagnóstico", layout="wide")
 st.title("📊 Painel de Avaliação Diagnóstica")
 
-uploaded_file = st.file_uploader("Arraste a planilha NAVARRO.xlsx aqui", type=["xlsx"])
+arquivo = st.file_uploader("Carregue a planilha NAVARRO.xlsx", type=["xlsx"])
 
-if uploaded_file:
+if arquivo:
     try:
-        # 1. Lendo a aba específica de dados
-        df = pd.read_excel(uploaded_file, sheet_name='Lancamentos')
+        # LER DIRETO: O ficheiro Lancamentos.csv que enviaste mostra que
+        # os títulos estão na linha 0. Não se pula nada.
+        df = pd.read_excel(arquivo, sheet_name='Lancamentos')
 
-        # 2. Normalização técnica de colunas (Remove acentos, espaços e caracteres especiais)
-        # Isso garante que 'Ano/Série' vire 'ANO_SERIE' e 'NÃO' vire 'NAO'
-        df.columns = [
-            str(c).strip().upper()
-            .replace('Á', 'A').replace('É', 'E').replace('Í', 'I')
-            .replace('Ó', 'O').replace('Ú', 'U').replace('Ã', 'A')
-            .replace('/', '_').replace(' ', '_').replace('.', '_')
-            for c in df.columns
-        ]
-
-        # Mapeia os nomes corrigidos para o uso no código
-        df.rename(columns={'ANO_SERIE': 'SERIE', 'QUESTAO_ITEM': 'QUESTAO'}, inplace=True)
-
-        # 3. Filtros Laterais dinâmicos
-        st.sidebar.header("Filtros de Pesquisa")
+        # FILTROS LATERAIS (Usando os nomes exatos das tuas colunas)
+        st.sidebar.header("Filtros")
         
-        lista_disc = sorted(df['DISCIPLINA'].dropna().unique())
-        sel_disc = st.sidebar.selectbox("Escolha a Disciplina", lista_disc)
+        # 1. Disciplina
+        disciplinas = sorted(df['Disciplina'].dropna().unique())
+        escolha_disc = st.sidebar.selectbox("Disciplina", disciplinas)
 
-        df_filt_disc = df[df['DISCIPLINA'] == sel_disc]
-        lista_serie = sorted(df_filt_disc['SERIE'].dropna().unique())
-        sel_serie = st.sidebar.selectbox("Escolha a Série", lista_serie)
+        # 2. Ano/Série (Filtrado pela disciplina anterior)
+        df_aux = df[df['Disciplina'] == escolha_disc]
+        series = sorted(df_aux['Ano/Série'].dropna().unique())
+        escolha_serie = st.sidebar.selectbox("Ano/Série", series)
 
-        df_filt_serie = df_filt_disc[df_filt_disc['SERIE'] == sel_serie]
-        lista_turma = sorted(df_filt_serie['TURMA'].dropna().unique())
-        sel_turma = st.sidebar.selectbox("Escolha a Turma", lista_turma)
+        # 3. Turma
+        turmas = sorted(df_aux[df_aux['Ano/Série'] == escolha_serie]['Turma'].dropna().unique())
+        escolha_turma = st.sidebar.selectbox("Turma", turmas)
 
-        # 4. Seleção Final dos Dados
-        dados_finais = df_filt_serie[df_filt_serie['TURMA'] == sel_turma]
+        # FILTRAGEM FINAL
+        resultado = df_aux[(df_aux['Ano/Série'] == escolha_serie) & (df_aux['Turma'] == escolha_turma)]
 
-        if not dados_finais.empty:
-            st.subheader(f"✅ Resultados: {sel_disc} - {sel_serie} (Turma {sel_turma})")
+        if not resultado.empty:
+            st.subheader(f"✅ Resultados: {escolha_disc} - {escolha_serie} ({escolha_turma})")
             
-            # Tabela de dados principais
-            cols_ver = ['HAB_ID', 'QUESTAO', 'HABILIDADE', 'SIM', 'PARCIAL', 'NAO']
-            st.dataframe(dados_finais[cols_ver], use_container_width=True)
+            # Mostrar a tabela com as colunas de dados
+            st.dataframe(resultado[['Questão/Item', 'Habilidade', 'SIM', 'PARCIAL', 'NÃO']], use_container_width=True)
 
-            # --- 5. GRÁFICOS INTERATIVOS ---
+            # --- GRÁFICOS ---
             st.divider()
             col1, col2 = st.columns(2)
 
             with col1:
-                st.write("### Desempenho Geral (Pizza)")
-                totais = pd.DataFrame({
-                    'Status': ['SIM', 'PARCIAL', 'NÃO'],
-                    'Votos': [dados_finais['SIM'].sum(), dados_finais['PARCIAL'].sum(), dados_finais['NAO'].sum()]
+                st.write("### Total Geral")
+                # Soma os valores de SIM, PARCIAL e NÃO da seleção
+                somas = pd.DataFrame({
+                    'Avaliação': ['SIM', 'PARCIAL', 'NÃO'],
+                    'Total': [resultado['SIM'].sum(), resultado['PARCIAL'].sum(), resultado['NÃO'].sum()]
                 })
-                fig_pie = px.pie(totais, values='Votos', names='Status', 
-                                 color='Status',
-                                 color_discrete_map={'SIM':'#2ecc71', 'PARCIAL':'#f1c40f', 'NÃO':'#e74c3c'})
-                st.plotly_chart(fig_pie, use_container_width=True)
+                fig_pizza = px.pie(somas, values='Total', names='Avaliação', 
+                                   color='Avaliação',
+                                   color_discrete_map={'SIM':'#2ecc71', 'PARCIAL':'#f1c40f', 'NÃO':'#e74c3c'})
+                st.plotly_chart(fig_pizza, use_container_width=True)
 
             with col2:
-                st.write("### Desempenho por Questão (Barras)")
-                # Gráfico de barras agrupadas
-                fig_bar = px.bar(dados_finais, x='QUESTAO', y=['SIM', 'PARCIAL', 'NAO'],
-                                 barmode='group',
-                                 color_discrete_map={'SIM':'#2ecc71', 'PARCIAL':'#f1c40f', 'NAO':'#e74c3c'},
-                                 labels={'value': 'Qtd Alunos', 'variable': 'Avaliação'})
-                st.plotly_chart(fig_bar, use_container_width=True)
+                st.write("### Detalhado por Questão")
+                fig_barra = px.bar(resultado, x='Questão/Item', y=['SIM', 'PARCIAL', 'NÃO'],
+                                   barmode='group',
+                                   color_discrete_map={'SIM':'#2ecc71', 'PARCIAL':'#f1c40f', 'NÃO':'#e74c3c'})
+                st.plotly_chart(fig_barra, use_container_width=True)
 
-            # --- 6. EXPORTAR PARA EXCEL (Alternativa robusta ao PDF) ---
+            # --- EXPORTAÇÃO EXCEL ---
             st.divider()
-            st.write("### 📤 Gerar Relatório")
-            
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                dados_finais.to_excel(writer, index=False, sheet_name='Relatorio')
+            buffer = BytesIO()
+            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                resultado.to_excel(writer, index=False, sheet_name='Relatorio')
             
             st.download_button(
-                label="📥 Baixar Dados em Excel",
-                data=output.getvalue(),
-                file_name=f"Relatorio_{sel_serie}_{sel_turma}.xlsx",
+                label="📥 Baixar Relatório em Excel",
+                data=buffer.getvalue(),
+                file_name=f"Relatorio_{escolha_serie}_{escolha_turma}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-            st.caption("As coordenadoras podem salvar o Excel como PDF após o download.")
-
-        else:
-            st.warning("Nenhum dado encontrado para os filtros aplicados.")
 
     except Exception as e:
-        st.error(f"Erro ao processar planilha: {e}")
+        st.error(f"Erro ao ler a aba 'Lancamentos'. Detalhe: {e}")
 else:
-    st.info("Aguardando upload da planilha NAVARRO.xlsx...")
+    st.info("Aguardando a planilha para exibir os dados das coordenadoras.")
