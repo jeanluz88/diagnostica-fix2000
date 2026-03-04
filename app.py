@@ -14,27 +14,23 @@ uploaded_file = st.file_uploader("Upload da Planilha Modelo_Diagnostica_Por_Turm
 
 if uploaded_file:
     try:
-        # Lê a planilha e remove espaços dos nomes das colunas
+        # Lê a planilha e limpa os nomes das colunas (remove espaços e acentos)
         df = pd.read_excel(uploaded_file)
-        
-        # --- NORMALIZAÇÃO DE COLUNAS (Blindagem contra erros de acento) ---
-        # Converte tudo para string, remove espaços e trata 'Série'
         df.columns = [str(c).strip().replace('Série', 'Serie').replace('SÉRIE', 'Serie') for c in df.columns]
 
         # Verifica colunas essenciais
-        colunas_obrigatorias = ['Disciplina', 'Serie', 'Turma', 'Resultado']
-        existentes = [c for c in colunas_obrigatorias if c in df.columns]
-        
-        if len(existentes) < len(colunas_obrigatorias):
-            faltando = list(set(colunas_obrigatorias) - set(existentes))
+        colunas_necessarias = ['Disciplina', 'Serie', 'Turma', 'Resultado']
+        faltando = [c for c in colunas_necessarias if c not in df.columns]
+
+        if faltando:
             st.error(f"⚠️ Erro na Planilha: Faltam as colunas: {', '.join(faltando)}")
-            st.info("Dica: Verifique se os nomes na primeira linha do Excel estão como: Disciplina, Série, Turma e Resultado.")
+            st.info("Dica: Verifique se os nomes na primeira linha estão como: Disciplina, Série, Turma e Resultado.")
         else:
-            # Limpa os dados internos para evitar duplicados
-            for col in colunas_obrigatorias:
+            # Limpa os dados internos
+            for col in colunas_necessarias:
                 df[col] = df[col].astype(str).str.strip()
 
-            # --- FILTROS ÚNICOS (Sem duplicados) ---
+            # --- FILTROS ÚNICOS ---
             st.sidebar.header("Filtros")
             lista_disc = sorted(df['Disciplina'].unique())
             disc_sel = st.sidebar.selectbox("Disciplina", lista_disc)
@@ -46,10 +42,10 @@ if uploaded_file:
             lista_tur = sorted(df_aux[df_aux['Serie'] == serie_sel]['Turma'].unique())
             turma_sel = st.sidebar.selectbox("Turma", lista_tur)
 
-            # Dados finais para exibição
+            # Filtragem final
             df_final = df_aux[(df_aux['Serie'] == serie_sel) & (df_aux['Turma'] == turma_sel)]
 
-            # --- LAYOUT LADO A LADO ---
+            # --- LAYOUT ---
             col1, col2 = st.columns([1.5, 1])
 
             with col1:
@@ -62,10 +58,3 @@ if uploaded_file:
             with col2:
                 st.subheader("Desempenho")
                 if not df_final.empty:
-                    fig, ax = plt.subplots()
-                    contagem = df_final['Resultado'].value_counts()
-                    ax.pie(contagem, labels=contagem.index, autopct='%1.1f%%', colors=['#2ecc71', '#f1c40f', '#e74c3c'])
-                    st.pyplot(fig)
-                    
-                    # --- GERAÇÃO DO PDF (Sintaxe Corrigida) ---
-                    if st.button("📄
