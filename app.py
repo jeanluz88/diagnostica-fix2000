@@ -1,85 +1,78 @@
 import streamlit as st
 import pandas as pd
+import matplotlib.pyplot as plt
+from fpdf import FPDF
 import io
-import unicodedata
 
-# =========================================================
-# 1. CONFIGURAÇÕES DE PÁGINA E INTERFACE
-# =========================================================
+# Configuração da página
 st.set_page_config(page_title="Painel Diagnóstico", layout="wide")
 
-# CSS para forçar a fonte 14pt e melhorar o visual
-st.markdown("""
-    <style>
-    .big-font { font-size:14pt !important; line-height: 1.6; }
-    .stSelectbox label { font-size: 12pt; font-weight: bold; }
-    </style>
-    """, unsafe_allow_html=True)
+# Estilo para fonte 14pt
+st.markdown("<style>.big-font { font-size:14pt !important; }</style>", unsafe_allow_html=True)
 
-st.title("Painel de Avaliação Diagnóstica")
+st.title("📊 Painel de Avaliação Diagnóstica")
 
-# =========================================================
-# 2. CARREGAMENTO E TRATAMENTO DE DADOS
-# =========================================================
-@st.cache_data(show_spinner="Sincronizando dados...")
-def load_data(file_bytes):
-    try:
-        xls = pd.ExcelFile(io.BytesIO(file_bytes))
-        # Carrega a aba correta da sua planilha Modelo_Diagnostica_Por_Turma
-        df = pd.read_excel(xls, sheet_name="Lancamentos")
-        
-        # Limpeza básica de espaços extras que geram duplicados
-        for col in ['Disciplina', 'Serie', 'Turma']:
-            if col in df.columns:
-                df[col] = df[col].astype(str).str.strip()
-        return df
-    except Exception as e:
-        st.error(f"Erro ao ler a planilha: {e}")
-        return None
-
+# Upload do arquivo
 uploaded_file = st.file_uploader("Upload da Planilha Modelo_Diagnostica_Por_Turma", type=["xlsx"])
 
 if uploaded_file:
-    df_lan = load_data(uploaded_file.read())
+    # Lendo a aba específica
+    df = pd.read_excel(uploaded_file, sheet_name="Lancamentos")
+    
+    # Limpeza de nomes para evitar duplicatas (ex: tirar espaços extras)
+    df['Disciplina'] = df['Disciplina'].astype(str).str.strip()
+    df['Serie'] = df['Serie'].astype(str).str.strip()
+    df['Turma'] = df['Turma'].astype(str).str.strip()
 
-    if df_lan is not None:
-        # --- FILTROS LATERAIS COM REMOÇÃO DE DUPLICADOS ---
-        st.sidebar.header("Filtros de Seleção")
-        
-        # Filtro de Disciplina (Correção da duplicidade)
-        lista_disciplinas = sorted(df_lan['Disciplina'].unique().tolist())
-        disciplina = st.sidebar.selectbox("Selecione a Disciplina", options=lista_disciplinas)
-        
-        # Filtro de Série
-        df_disc = df_lan[df_lan['Disciplina'] == disciplina]
-        lista_series = sorted(df_disc['Serie'].unique().tolist())
-        serie = st.sidebar.selectbox("Selecione a Série", options=lista_series)
-        
-        # Filtro de Turma
-        df_serie = df_disc[df_disc['Serie'] == serie]
-        lista_turmas = sorted(df_serie['Turma'].unique().tolist())
-        turma = st.sidebar.selectbox("Selecione a Turma", options=lista_turmas)
+    # --- FILTROS COM VALORES ÚNICOS ---
+    st.sidebar.header("Filtros")
+    
+    # .unique() corrige o erro de aparecer "Língua Portuguesa" duas vezes
+    disciplinas = sorted(df['Disciplina'].unique())
+    disciplina_sel = st.sidebar.selectbox("Disciplina", disciplinas)
 
-        # Dados Finais Filtrados
-        df_final = df_serie[df_serie['Turma'] == turma]
+    series = sorted(df[df['Disciplina'] == disciplina_sel]['Serie'].unique())
+    serie_sel = st.sidebar.selectbox("Série", series)
 
-        # =========================================================
-        # 3. EXIBIÇÃO DOS RESULTADOS (LAYOUT LADO A LADO)
-        # =========================================================
-        col1, col2 = st.columns([2, 1])
+    turmas = sorted(df[(df['Disciplina'] == disciplina_sel) & (df['Serie'] == serie_sel)]['Turma'].unique())
+    turma_sel = st.sidebar.selectbox("Turma", turmas)
 
-        with col1:
-            st.subheader("Habilidades Analisadas")
-            for index, row in df_final.iterrows():
-                # Texto com fonte 14pt conforme solicitado
-                st.markdown(f'<p class="big-font"><b>{row["Habilidade_Codigo"]}:</b> {row["Habilidade_Descricao"]}</p>', unsafe_allow_html=True)
+    # Filtragem final dos dados
+    dados_filtrados = df[(df['Disciplina'] == disciplina_sel) & 
+                         (df['Serie'] == serie_sel) & 
+                         (df['Turma'] == turma_sel)]
 
-        with col2:
-            st.subheader("Desempenho da Turma")
-            # Aqui entra a lógica do seu gráfico (Matplotlib/Plotly)
-            st.info("Gráfico gerado automaticamente com base nos filtros selecionados.")
+    # --- LAYOUT LADO A LADO ---
+    col1, col2 = st.columns([1.5, 1])
+
+    with col1:
+        st.subheader("Habilidades")
+        for i, row in dados_filtrados.iterrows():
+            # Exibição com fonte 14pt
+            st.markdown(f'<p class="big-font"><b>{row["Habilidade_Codigo"]}:</b> {row["Habilidade_Descricao"]}</p>', unsafe_allow_html=True)
+
+    with col2:
+        st.subheader("Desempenho")
+        # Gerando o gráfico simples
+        fig, ax = plt.subplots()
+        contagem = dados_filtrados['Resultado'].value_counts()
+        ax.pie(contagem, labels=contagem.index, autopct='%1.1f%%', colors=['#4CAF50', '#FFC107', '#F44336'])
+        st.pyplot(fig)
+
+        # --- BOTÃO GERAR PDF ---
+        if st.button("Gerar PDF"):
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_font("Arial", 'B', 16)
+            pdf.cell(200, 10, f"Relatório - {disciplina_sel} - {serie_sel} {turma_sel}", ln=True, align='C')
             
-            if st.button("Gerar PDF"):
-                st.success("Relatório preparado para download!")
+            pdf.set_font("Arial", size=12)
+            for i, row in dados_filtrados.iterrows():
+                texto = f"{row['Habilidade_Codigo']}: {row['Habilidade_Descricao']}"
+                pdf.multi_cell(0, 10, texto.encode('latin-1', 'replace').decode('latin-1'))
+            
+            pdf_output = pdf.output(dest='S').encode('latin-1')
+            st.download_button(label="📥 Baixar Relatório PDF", data=pdf_output, file_name="Relatorio_Diagnostica.pdf", mime="application/pdf")
+
 else:
-    st.info("Aguardando planilha... Por favor, faça o upload do arquivo para começar.")
+    st.info("Aguardando a planilha Modelo_Diagnostica_Por_Turma...")
