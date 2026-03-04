@@ -1,73 +1,82 @@
 import streamlit as st
 import pandas as pd
 
-# Configuração da página
 st.set_page_config(page_title="Painel Diagnóstico", layout="wide")
 st.title("📊 Painel de Avaliação Diagnóstica")
 
-# Upload do arquivo
 uploaded_file = st.file_uploader("Arraste a planilha NAVARRO.xlsx aqui", type=["xlsx"])
 
 if uploaded_file:
     try:
-        # 1. Carrega o Excel sem considerar nenhum cabeçalho para análise bruta
-        df_raw = pd.read_excel(uploaded_file, header=None)
+        # 1. Carregar especificamente a aba de 'Lancamentos'
+        # Usamos engine='openpyxl' para garantir compatibilidade
+        df = pd.read_excel(uploaded_file, sheet_name='Lancamentos')
         
-        # 2. Busca exaustiva pela linha que contém os dados reais
-        # Procuramos por 'DISCIPLINA' em qualquer lugar da planilha
-        start_row = None
-        for i, row in df_raw.iterrows():
-            linha_completa = " ".join([str(val).upper() for val in row.values if pd.notna(val)])
-            if 'DISCIPLINA' in linha_completa:
-                start_row = i
-                break
+        # 2. Padronização Radical de Colunas
+        # Remove espaços, acentos e caracteres especiais para evitar erros de busca
+        df.columns = [
+            str(c).strip().upper()
+            .replace('Á', 'A').replace('É', 'E').replace('Í', 'I')
+            .replace('Ó', 'O').replace('Ú', 'U')
+            .replace('/', '_').replace(' ', '_')
+            for c in df.columns
+        ]
+
+        # 3. Mapeamento Inteligente
+        # A coluna na planilha é 'ANO/SÉRIE', no código tratamos como 'ANO_SERIE'
+        mapeamento = {
+            'ANO_SERIE': 'SERIE',
+            'DISCIPLINA': 'DISCIPLINA',
+            'TURMA': 'TURMA'
+        }
+        df.rename(columns=mapeamento, inplace=True)
+
+        # 4. Verificação de Colunas Vitais
+        colunas_necessarias = ['DISCIPLINA', 'SERIE', 'TURMA']
         
-        if start_row is not None:
-            # 3. Relê a planilha a partir da linha encontrada
-            df = pd.read_excel(uploaded_file, skiprows=start_row)
+        if all(c in df.columns for c in colunas_necessarias):
+            # Limpeza de dados das células
+            for col in colunas_necessarias:
+                df[col] = df[col].astype(str).str.strip()
+
+            # --- INTERFACE DE FILTROS ---
+            st.sidebar.header("Filtros de Avaliação")
             
-            # 4. Limpeza radical de nomes de colunas (tira espaços, acentos e põe em maiúsculo)
-            df.columns = [
-                str(c).strip().upper()
-                .replace('É', 'E').replace('Í', 'I').replace('Á', 'A').replace('Ó', 'O')
-                for c in df.columns
-            ]
+            # Disciplina
+            lista_disc = sorted(df['DISCIPLINA'].unique())
+            sel_disc = st.sidebar.selectbox("Escolha a Disciplina", lista_disc)
 
-            # 5. Verifica as colunas mínimas para o filtro
-            cols_necessarias = ['DISCIPLINA', 'SERIE', 'TURMA']
-            if all(c in df.columns for c in cols_necessarias):
+            # Série (filtrada por disciplina)
+            df_filt_disc = df[df['DISCIPLINA'] == sel_disc]
+            lista_serie = sorted(df_filt_disc['SERIE'].unique())
+            sel_serie = st.sidebar.selectbox("Escolha a Série", lista_serie)
+
+            # Turma (filtrada por série e disciplina)
+            df_filt_serie = df_filt_disc[df_filt_disc['SERIE'] == sel_serie]
+            lista_turma = sorted(df_filt_serie['TURMA'].unique())
+            sel_turma = st.sidebar.selectbox("Escolha a Turma", lista_turma)
+
+            # --- EXIBIÇÃO ---
+            df_final = df_filt_serie[df_filt_serie['TURMA'] == sel_turma]
+            
+            st.subheader(f"✅ Dados Filtrados: {sel_disc} | {sel_serie} - Turma {sel_turma}")
+            
+            if not df_final.empty:
+                # Exibe a tabela com as colunas principais
+                colunas_exibir = ['HABILIDADE', 'TOTAL_DE_ALUNOS', 'SIM', 'PARCIAL', 'NAO']
+                # Verifica se essas colunas de dados existem antes de exibir
+                cols_presentes = [c for c in colunas_exibir if c in df_final.columns]
                 
-                # Limpa os dados das colunas de filtro
-                for c in cols_necessarias:
-                    df[c] = df[c].astype(str).str.strip()
-
-                # Interface de Filtros
-                st.sidebar.header("Filtros")
-                disc_list = sorted(df['DISCIPLINA'].unique())
-                disc_sel = st.sidebar.selectbox("Disciplina", disc_list)
-
-                serie_list = sorted(df[df['DISCIPLINA'] == disc_sel]['SERIE'].unique())
-                serie_sel = st.sidebar.selectbox("Série", serie_list)
-
-                turma_list = sorted(df[(df['DISCIPLINA'] == disc_sel) & (df['SERIE'] == serie_sel)]['TURMA'].unique())
-                turma_sel = st.sidebar.selectbox("Turma", turma_list)
-
-                # Resultado Final
-                dados_filtrados = df[(df['DISCIPLINA'] == disc_sel) & 
-                                    (df['SERIE'] == serie_sel) & 
-                                    (df['TURMA'] == turma_sel)]
-                
-                st.subheader(f"✅ Exibindo: {disc_sel} | {serie_sel} {turma_sel}")
-                st.dataframe(dados_filtrados, use_container_width=True)
-                
+                st.dataframe(df_final[cols_presentes + ['QUESTAO_ITEM']], use_container_width=True)
             else:
-                st.error("⚠️ Títulos não encontrados na linha de dados.")
-                st.write("Colunas detectadas:", list(df.columns))
+                st.warning("Nenhum dado encontrado para os filtros selecionados.")
+        
         else:
-            st.error("❌ Não foi possível localizar a palavra 'DISCIPLINA' na planilha.")
-            st.info("O sistema varreu todas as linhas e não encontrou o cabeçalho de dados.")
+            st.error("⚠️ Erro na estrutura da planilha.")
+            st.write("Colunas detectadas:", list(df.columns))
+            st.info("A aba 'Lancamentos' deve conter as colunas: Ano/Série, Disciplina e Turma.")
 
     except Exception as e:
-        st.error(f"Erro inesperado: {e}")
+        st.error(f"Erro ao ler a planilha: {e}")
 else:
-    st.info("Aguardando upload da planilha...")
+    st.info("Aguardando upload do arquivo para processar os dados das coordenadoras.")
