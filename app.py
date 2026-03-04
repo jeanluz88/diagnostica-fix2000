@@ -8,75 +8,46 @@ uploaded_file = st.file_uploader("Arraste a planilha NAVARRO.xlsx aqui", type=["
 
 if uploaded_file:
     try:
-        # 1. Carregar especificamente a aba de 'Lancamentos'
-        # Usamos engine='openpyxl' para garantir compatibilidade
+        # Lê o arquivo focando na aba 'Lancamentos'
+        # O parâmetro header=0 assume que a linha de títulos está logo antes dos dados
         df = pd.read_excel(uploaded_file, sheet_name='Lancamentos')
         
-        # 2. Padronização Radical de Colunas
-        # Remove espaços, acentos e caracteres especiais para evitar erros de busca
-        df.columns = [
-            str(c).strip().upper()
-            .replace('Á', 'A').replace('É', 'E').replace('Í', 'I')
-            .replace('Ó', 'O').replace('Ú', 'U')
-            .replace('/', '_').replace(' ', '_')
-            for c in df.columns
-        ]
-
-        # 3. Mapeamento Inteligente
-        # A coluna na planilha é 'ANO/SÉRIE', no código tratamos como 'ANO_SERIE'
-        mapeamento = {
-            'ANO_SERIE': 'SERIE',
+        # Padroniza os nomes das colunas para evitar KeyError
+        df.columns = [str(c).strip().upper() for c in df.columns]
+        
+        # Mapeamento para garantir que o sistema encontre as colunas
+        mapa = {
+            'ANO/SÉRIE': 'ANO/SERIE',
             'DISCIPLINA': 'DISCIPLINA',
             'TURMA': 'TURMA'
         }
-        df.rename(columns=mapeamento, inplace=True)
+        df.rename(columns=mapa, inplace=True)
 
-        # 4. Verificação de Colunas Vitais
-        colunas_necessarias = ['DISCIPLINA', 'SERIE', 'TURMA']
+        # Filtros necessários
+        st.sidebar.header("Filtros")
         
-        if all(c in df.columns for c in colunas_necessarias):
-            # Limpeza de dados das células
-            for col in colunas_necessarias:
-                df[col] = df[col].astype(str).str.strip()
+        # 1. Filtro de Disciplina
+        disc_list = sorted(df['DISCIPLINA'].dropna().unique())
+        disc_sel = st.sidebar.selectbox("Disciplina", disc_list)
 
-            # --- INTERFACE DE FILTROS ---
-            st.sidebar.header("Filtros de Avaliação")
-            
-            # Disciplina
-            lista_disc = sorted(df['DISCIPLINA'].unique())
-            sel_disc = st.sidebar.selectbox("Escolha a Disciplina", lista_disc)
+        # 2. Filtro de Série
+        serie_list = sorted(df[df['DISCIPLINA'] == disc_sel]['ANO/SERIE'].dropna().unique())
+        serie_sel = st.sidebar.selectbox("Ano/Série", serie_list)
 
-            # Série (filtrada por disciplina)
-            df_filt_disc = df[df['DISCIPLINA'] == sel_disc]
-            lista_serie = sorted(df_filt_disc['SERIE'].unique())
-            sel_serie = st.sidebar.selectbox("Escolha a Série", lista_serie)
+        # 3. Filtro de Turma
+        turma_list = sorted(df[(df['DISCIPLINA'] == disc_sel) & (df['ANO/SERIE'] == serie_sel)]['TURMA'].dropna().unique())
+        turma_sel = st.sidebar.selectbox("Turma", turma_list)
 
-            # Turma (filtrada por série e disciplina)
-            df_filt_serie = df_filt_disc[df_filt_disc['SERIE'] == sel_serie]
-            lista_turma = sorted(df_filt_serie['TURMA'].unique())
-            sel_turma = st.sidebar.selectbox("Escolha a Turma", lista_turma)
-
-            # --- EXIBIÇÃO ---
-            df_final = df_filt_serie[df_filt_serie['TURMA'] == sel_turma]
-            
-            st.subheader(f"✅ Dados Filtrados: {sel_disc} | {sel_serie} - Turma {sel_turma}")
-            
-            if not df_final.empty:
-                # Exibe a tabela com as colunas principais
-                colunas_exibir = ['HABILIDADE', 'TOTAL_DE_ALUNOS', 'SIM', 'PARCIAL', 'NAO']
-                # Verifica se essas colunas de dados existem antes de exibir
-                cols_presentes = [c for c in colunas_exibir if c in df_final.columns]
-                
-                st.dataframe(df_final[cols_presentes + ['QUESTAO_ITEM']], use_container_width=True)
-            else:
-                st.warning("Nenhum dado encontrado para os filtros selecionados.")
+        # Exibição dos dados filtrados
+        dados = df[(df['DISCIPLINA'] == disc_sel) & 
+                   (df['ANO/SERIE'] == serie_sel) & 
+                   (df['TURMA'] == turma_sel)]
         
-        else:
-            st.error("⚠️ Erro na estrutura da planilha.")
-            st.write("Colunas detectadas:", list(df.columns))
-            st.info("A aba 'Lancamentos' deve conter as colunas: Ano/Série, Disciplina e Turma.")
+        st.subheader(f"Resultados: {disc_sel} - {serie_sel} (Turma {turma_sel})")
+        st.dataframe(dados, use_container_width=True)
 
     except Exception as e:
-        st.error(f"Erro ao ler a planilha: {e}")
+        st.error(f"Erro ao processar: {e}")
+        st.info("Dica: Certifique-se de que a aba se chama exatamente 'Lancamentos'.")
 else:
-    st.info("Aguardando upload do arquivo para processar os dados das coordenadoras.")
+    st.info("Aguardando upload da planilha.")
