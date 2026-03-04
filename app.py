@@ -1,43 +1,46 @@
 import streamlit as st
 import pandas as pd
 
-# 1. Configuração de Página
+# 1. Configuração Básica e Estável
 st.set_page_config(page_title="Painel Diagnóstico", layout="wide")
 st.title("📊 Painel de Avaliação Diagnóstica")
 
-# 2. Upload do Arquivo
 uploaded_file = st.file_uploader("Arraste a planilha NAVARRO.xlsx aqui", type=["xlsx"])
 
 if uploaded_file:
     try:
-        # Lemos a planilha sem considerar cabeçalhos para "escanear" o arquivo
+        # Lemos a planilha bruta para localizar onde os dados começam
         df_raw = pd.read_excel(uploaded_file, header=None)
         
-        # BUSCA DINÂMICA: Varre as linhas até achar onde está escrito 'DISCIPLINA'
-        # Isso pula automaticamente qualquer aviso ou instrução no topo
+        # BUSCA DINÂMICA: Varre as linhas até achar 'DISCIPLINA' ou 'SERIE'
+        # Isso ignora textos de instrução ou títulos mesclados no topo
         start_row = 0
         for i, row in df_raw.iterrows():
-            linha_texto = " ".join([str(v).upper() for v in row.values if pd.notna(v)])
-            if 'DISCIPLINA' in linha_texto and 'SERIE' in linha_texto:
+            linha_txt = " ".join([str(v).upper() for v in row.values if pd.notna(v)])
+            if 'DISCIPLINA' in linha_txt or 'SERIE' in linha_txt:
                 start_row = i
                 break
         
-        # Relê o arquivo a partir da linha de dados correta encontrada
+        # Relê o arquivo a partir da linha correta identificada
         df = pd.read_excel(uploaded_file, skiprows=start_row)
         
-        # Limpa nomes de colunas: remove espaços e trata acentos
-        df.columns = [str(c).strip().upper().replace('É', 'E').replace('Í', 'I') for c in df.columns]
+        # NORMALIZAÇÃO: Remove espaços e trata acentos nos nomes das colunas
+        df.columns = [
+            str(c).strip().upper()
+            .replace('É', 'E').replace('Í', 'I').replace('Á', 'A') 
+            for c in df.columns
+        ]
 
-        # Colunas vitais para o funcionamento
-        cols_vitais = ['DISCIPLINA', 'SERIE', 'TURMA']
+        # Colunas essenciais para os filtros funcionarem
+        colunas_vivas = ['DISCIPLINA', 'SERIE', 'TURMA']
         
-        if all(c in df.columns for c in cols_vitais):
+        if all(c in df.columns for c in colunas_vivas):
             # Limpa espaços extras dentro das células de dados
-            for c in cols_vitais:
-                df[c] = df[c].astype(str).str.strip()
+            for col in colunas_vivas:
+                df[col] = df[col].astype(str).str.strip()
 
             # --- SISTEMA DE FILTROS ---
-            st.sidebar.header("Filtros de Busca")
+            st.sidebar.header("Filtros de Seleção")
             
             d_list = sorted(df['DISCIPLINA'].unique())
             d_sel = st.sidebar.selectbox("1. Escolha a Disciplina", d_list)
@@ -48,19 +51,20 @@ if uploaded_file:
             t_list = sorted(df[(df['DISCIPLINA'] == d_sel) & (df['SERIE'] == s_sel)]['TURMA'].unique())
             t_sel = st.sidebar.selectbox("3. Escolha a Turma", t_list)
 
-            # --- EXIBIÇÃO ---
+            # --- EXIBIÇÃO DOS RESULTADOS ---
             resultado = df[(df['DISCIPLINA'] == d_sel) & 
                           (df['SERIE'] == s_sel) & 
                           (df['TURMA'] == t_sel)]
             
-            st.subheader(f"✅ Resultados encontrados para: {d_sel}")
+            st.subheader(f"✅ Resultados: {d_sel} - {s_sel} {t_sel}")
             st.dataframe(resultado, use_container_width=True)
             
         else:
-            st.error("⚠️ Não foi possível localizar as colunas de dados.")
-            st.info("O sistema tentou ler a planilha, mas não achou os títulos 'Disciplina' e 'Série'.")
+            st.error("⚠️ Não conseguimos localizar as colunas de dados.")
+            st.write("Colunas detectadas pelo sistema:", list(df.columns))
+            st.info("Verifique se os títulos 'Disciplina' e 'Série' estão na sua planilha.")
 
     except Exception as e:
-        st.error(f"Erro ao processar o arquivo: {e}")
+        st.error(f"Erro técnico ao processar o arquivo: {e}")
 else:
-    st.info("Aguardando o upload da planilha para liberar os filtros.")
+    st.info("Aguardando upload da planilha para liberar o acesso das coordenadoras.")
