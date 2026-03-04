@@ -1,6 +1,9 @@
-altair
-pandas
-openpyxl
-matplotlib
 streamlit
-reportlab
+
+pandas
+
+openpyxl
+
+matplotlib
+
+fpdf
