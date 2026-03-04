@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 
+# Configuração essencial
 st.set_page_config(page_title="Painel Diagnóstico", layout="wide")
 st.title("📊 Painel de Avaliação Diagnóstica")
 
@@ -8,56 +9,61 @@ uploaded_file = st.file_uploader("Arraste a planilha NAVARRO.xlsx aqui", type=["
 
 if uploaded_file:
     try:
-        # Lemos a planilha bruta sem considerar cabeçalhos
+        # 1. Leitura bruta para encontrar onde os dados começam
         df_raw = pd.read_excel(uploaded_file, header=None)
         
-        # BUSCA AUTOMÁTICA: Varre as linhas para achar 'DISCIPLINA' ou 'SERIE'
-        # Isso ignora qualquer texto de instrução que esteja no topo da planilha
+        # 2. Busca automática pela linha do cabeçalho real
         start_row = 0
         for i, row in df_raw.iterrows():
-            linha_texto = " ".join([str(v).upper() for v in row.values if pd.notna(v)])
-            if 'DISCIPLINA' in linha_texto and 'SERIE' in linha_texto:
+            # Converte a linha em texto e procura por palavras-chave
+            linha_txt = " ".join([str(v).upper() for v in row.values if pd.notna(v)])
+            if 'DISCIPLINA' in linha_txt and 'SERIE' in linha_txt:
                 start_row = i
                 break
         
-        # Relê o arquivo a partir da linha correta
+        # 3. Carrega os dados reais a partir da linha encontrada
         df = pd.read_excel(uploaded_file, skiprows=start_row)
         
-        # Limpa nomes de colunas: remove espaços e padroniza acentos
+        # 4. Limpeza e Padronização de Colunas (remove espaços e acentos)
         df.columns = [str(c).strip().upper().replace('É', 'E').replace('Í', 'I') for c in df.columns]
 
-        # Verifica se as 3 colunas vitais existem
-        cols_vivas = ['DISCIPLINA', 'SERIE', 'TURMA']
-        if all(c in df.columns for c in cols_vivas):
-            
-            # Limpa espaços dentro das células
-            for c in cols_vivas:
-                df[c] = df[c].astype(str).str.strip()
+        # Colunas que o sistema precisa para filtrar
+        cols_alvo = ['DISCIPLINA', 'SERIE', 'TURMA']
+        
+        if all(c in df.columns for c in cols_alvo):
+            # Garante que os dados dentro das células também estejam limpos
+            for col in cols_alvo:
+                df[col] = df[col].astype(str).str.strip()
 
             # --- FILTROS LATERAIS ---
-            st.sidebar.header("Filtros")
+            st.sidebar.header("Filtros de Busca")
             
-            d_list = sorted(df['DISCIPLINA'].unique())
-            d_sel = st.sidebar.selectbox("Disciplina", d_list)
+            # Filtro de Disciplina
+            lista_d = sorted(df['DISCIPLINA'].unique())
+            sel_d = st.sidebar.selectbox("Selecione a Disciplina", lista_d)
 
-            s_list = sorted(df[df['DISCIPLINA'] == d_sel]['SERIE'].unique())
-            s_sel = st.sidebar.selectbox("Série", s_list)
+            # Filtro de Série (baseado na disciplina)
+            lista_s = sorted(df[df['DISCIPLINA'] == sel_d]['SERIE'].unique())
+            sel_s = st.sidebar.selectbox("Selecione a Série", lista_s)
 
-            t_list = sorted(df[(df['DISCIPLINA'] == d_sel) & (df['SERIE'] == s_sel)]['TURMA'].unique())
-            t_sel = st.sidebar.selectbox("Turma", t_list)
+            # Filtro de Turma (baseado nos anteriores)
+            lista_t = sorted(df[(df['DISCIPLINA'] == sel_d) & (df['SERIE'] == sel_s)]['TURMA'].unique())
+            sel_t = st.sidebar.selectbox("Selecione a Turma", lista_t)
 
-            # --- EXIBIÇÃO DOS DADOS ---
-            final = df[(df['DISCIPLINA'] == d_sel) & (df['SERIE'] == s_sel) & (df['TURMA'] == t_sel)]
+            # --- EXIBIÇÃO FINAL ---
+            resultado = df[(df['DISCIPLINA'] == sel_d) & 
+                          (df['SERIE'] == sel_s) & 
+                          (df['TURMA'] == sel_t)]
             
-            st.subheader(f"✅ Exibindo: {d_sel} - {s_sel} {t_sel}")
-            st.dataframe(final, use_container_width=True)
+            st.subheader(f"✅ Resultados para: {sel_d} - {sel_s} {sel_t}")
+            st.dataframe(resultado, use_container_width=True)
             
         else:
-            st.error("⚠️ Títulos das colunas não encontrados.")
-            st.write("O sistema detectou estas colunas:", list(df.columns))
-            st.info("Verifique se os nomes 'Disciplina', 'Série' e 'Turma' estão na planilha.")
+            st.error("⚠️ Não encontramos as colunas 'Disciplina' e 'Série'.")
+            st.write("Colunas detectadas na linha de dados:", list(df.columns))
+            st.info("Dica: Verifique se os nomes estão escritos corretamente na planilha.")
 
     except Exception as e:
-        st.error(f"Erro ao processar o arquivo: {e}")
+        st.error(f"Erro ao processar arquivo: {e}")
 else:
-    st.info("Aguardando upload da planilha...")
+    st.info("Aguardando o upload da planilha para liberar os filtros.")
