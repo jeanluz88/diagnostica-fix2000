@@ -134,7 +134,7 @@ if uploaded:
         s, p, n = int(df_agg["SIM"].iloc[i]), int(df_agg["PARCIAL"].iloc[i]), int(df_agg["NÃO"].iloc[i])
         ps, pp, pn = df_agg["p_sim"].iloc[i], df_agg["p_par"].iloc[i], df_agg["p_nao"].iloc[i]
         
-        if ps > 5:
+        if ps > 5: 
             ax.text(ps/2, i, f"{s}\n({ps:.0f}%)", va='center', ha='center', color='white', fontweight='bold', fontsize=11)
         if pp > 5:
             ax.text(ps + pp/2, i, f"{p}\n({pp:.0f}%)", va='center', ha='center', color='black', fontweight='bold', fontsize=11)
